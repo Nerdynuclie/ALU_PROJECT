@@ -67,7 +67,7 @@ always@(posedge CLK)
          end
          else if(MODE)
          begin
-           RES=0;
+           //RES=0;
            COUT=1'b0;
            OFLOW=1'b0;
            G=1'b0;
