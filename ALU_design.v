@@ -423,7 +423,7 @@ always@(posedge CLK)
              end
              default:    // For any other case send high impedence value
                begin
-               RES<=0;
+               RES<=RES;
                COUT<=0;
                OFLOW<=0;
                G<=0;
