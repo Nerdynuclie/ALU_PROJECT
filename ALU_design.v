@@ -1,60 +1,63 @@
-// Code your design here
-module ALU_design#(parameter N=4)(OPA,OPB,CIN,CLK,RST,INP_VALID,CMD,CE,MODE,COUT,OFLOW,RES,G,E,L,ERR);
+`default_nettype none
+module ALU_design #(parameter N = 4)(
+    input wire CLK,
+    input wire RST,
+    input wire CE,//clk enable
+    input wire MODE,//mode of operation(1=arithmetic 0=logical)
+    input wire CIN,//carry input
+    input wire [3:0] CMD,//which operation 
+    input wire [1:0] INP_VALID,//input valid
+    input wire [N-1:0] OPA,
+    input wire [N-1:0] OPB,
+    output reg ERR,//error flag
+    output reg [2*N:0] RES,//result
+    output reg OFLOW,
+    output reg COUT,
+    output reg G,//OPA greater than OPB
+    output reg E,//OPA equal to OPB
+    output reg L //OPA less than OPB 
+);
 
+reg [N-1:0] OPA_1;
+reg [N-1:0] OPB_1;
+reg [3:0] CMD_1;
 
-//Input output port declaration
-  input [N-1:0] OPA,OPB;
-  input CLK,RST,CE,MODE,CIN;
-  input [1:0] INP_VALID;
-  input [3:0] CMD;
-  output reg [(2*N)-1:0] RES=0;
-  output reg COUT =0;
-  output reg OFLOW=0;
-  output reg G=0;
-  output reg E=0;
-  output reg L =0;
-  output reg ERR=0;
+reg [N:0] sum;
+reg [N:0] diff;
 
-//Temporary register declaration
-  reg [N-1:0] OPA_1, OPB_1;
-  reg [N:0] sum;//for signed addition operations
-  reg [N:0] diff;//for signed subtraction
-//Multiplication  control
-reg[1:0] mul_count;
-reg [2*N-1:0] temp_mul;
 reg mul_active;
-reg [3:0] mul_cmd;
-wire is_mul_cmd;
-assign is_mul_cmd=(CMD==4'b1001 || CMD==4'b1010);
-always@(posedge CLK)
-      begin
-         if(RST)                // If reset is active high all output signals are equal to zero
-          begin
-            RES<=0;
-            COUT<=0;
-            OFLOW<=0;
-            G<=0;
-            E<=0;
-            L<=0;
-            ERR<=0;
-          end
-       
-       else if(CE)                   // If clock enable is active high then check for other control signals
-        begin
-          if(mul_active)  //for multiplication making the result to appear at 3rd clk cycle
+reg [3:0] mul_CMD;
+reg mul_count;
+reg [2*N-1:0] temp_mul;
+
+always @(posedge CLK or posedge RST ) begin
+    OPA_1<=OPA;
+    OPB_1<=OPB;
+    CMD_1<=CMD;
+    if(RST) begin //reset all the output
+        RES<=0;
+        COUT<=0;
+        ERR<=0;
+        OFLOW<=0;
+        G<=0;
+        E<=0;
+        L<=0;
+    end
+    else if (CE) begin //checking for clock enable
+                  if(mul_active)  //for multiplication making the result to appear at 3rd clk cycle
          begin
-            if(INP_VALID!=2'b11) begin
+            if(INP_VALID!=2'b11) begin //if Input is inlvalid ERR=1
                 RES<=0;
                 ERR<=1;
                 mul_active<=0;
                 mul_count<=0;
             end
-            else if(CMD!=mul_cmd) begin
+            else if(CMD!=mul_CMD) begin // if CMD!=mul(4'b1001 or 4'b1010)
                 mul_active<=0;
                 mul_count<=0;
                 RES<=RES;
             end
-            else
+            else // if input is valid and mul_CMD is also high 
             mul_count<=mul_count+1;
             if(mul_count==0) begin
               RES<=2*N-1'bx;
@@ -65,374 +68,453 @@ always@(posedge CLK)
                 mul_count<=0;
             end
          end
-         else if(MODE)
-         begin
-           RES<=0;
-           COUT<=1'b0;
-           OFLOW<=1'b0;
-           G<=1'b0;
-           E<=1'b0;
-           L<=1'b0;
-           ERR<=1'b0;
-          case(CMD)             // CMD is the binary code value of the Arithmetic Operation
-           4'b0000:             // CMD = 0000: ADD 
-            begin  
-                if(INP_VALID==2'b11) begin      
-                    RES<=OPA+OPB;
-                    
-                    COUT<=({1'b0,OPA}+{1'b0,OPB})>>N;
-            end
-            else begin
+    else if(MODE) begin
+         RES<=0;
+         ERR<=0;
+         G<=0;
+         E<=0;
+         L<=0;
+         COUT<=0;
+         OFLOW<=0;
+         case(INP_VALID) 
+         2'b00: begin //both OPA and OPB not valid
+            RES<=0;
+            ERR<=1;
+         end
+         2'b01: begin //only when OPA is valid
+            case(CMD_1) 
+            4'b000: begin
                 RES<=0;
                 ERR<=1;
             end
-            end
-	   4'b0001:             // CMD = 0001: SUB
-            begin
-                if(INP_VALID==2'b11) begin
-                    OFLOW<=(OPA<OPB)?1:0;
-                    RES<=OPA-OPB;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-            end
-           4'b0010:             // CMD = 0010: ADD_CIN
-            begin
-                if(INP_VALID==2'b11) begin
-                    RES<=OPA+OPB+CIN;
-                    COUT<=({1'b0,OPA}+{1'b0,OPB}+CIN)>>N;;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-            end
-           4'b0011:            // CMD = 0011: SUB_CIN. Here we set the overflow flag
-           begin
-             if(INP_VALID==2'b11) begin
-                OFLOW<=(OPA<OPB)?1:0;
-                RES<=OPA-OPB-CIN;    
-            end
-            else begin
+            4'b0001: begin
                 RES<=0;
                 ERR<=1;
             end
-           end
-           4'b0100:begin  // CMD = 0100: INC_A
-            if(INP_VALID==2'b11 || INP_VALID==2'b01) begin 
-                RES<=OPA+1;  
-                COUT<=({1'b0,OPA}+1'b1)>>N; 
-            end
-            else begin
+            4'b0010: begin
                 RES<=0;
                 ERR<=1;
             end
-           end
-
-           4'b0101: begin  // CMD = 0101: DEC_A
-            if(INP_VALID==2'b11 || INP_VALID==2'b01) begin 
-                RES<=OPA-1;
-                OFLOW<=(OPA<1'b1)? 1'b1: 1'b0;   
-            end
-            else begin
+            4'b0011:begin
                 RES<=0;
                 ERR<=1;
             end
-           end
-           4'b0110:begin // CMD = 0110: INC_B
-            if(INP_VALID==2'b11 || INP_VALID==2'b10) begin 
-                RES<=OPB+1;
-                COUT<=({1'b0,OPB}+1'b1)>>N;   
-            end
-            else begin
-                RES<=0;
-                ERR<=1;
-            end
-           end
-           4'b0111: begin  // CMD = 0111: DEC_B
-            if(INP_VALID==2'b11 || INP_VALID==2'b10) begin
-                RES<=OPB-1'b1;
-                OFLOW<=(OPB<1'b1)? 1: 0;
+            4'b0100: begin
+                RES<={1'b0,OPA_1}+1;
+                COUT<=({1'b0,OPA_1}+1'b1)>>N; 
                 ERR<=0;
             end
-            else begin
-                RES<=1;
+            4'b0101: begin
+                RES<={1'b0,OPA_1}-1;
+                OFLOW<=(OPA_1<1'b1)? 1'b1: 1'b0; 
+                ERR<=0;
+            end
+            4'b0110: begin
+                RES<=0;
                 ERR<=1;
             end
-           end   
-           4'b1000:              // CMD = 1000: CMP
-           begin
-            RES<=0;
-            if(INP_VALID==2'b11) begin
-            if(OPA==OPB)
-             begin
-               E<=1'b1;
-               G<=1'b0;
-               L<=1'b0;
-             end
-
-            else if(OPA>OPB)
-             begin
-               E<=1'b0;
-               G<=1'b1;
-               L<=1'b0;
-             end
-            else 
-             begin
-               E<=1'b0;
-               G<=1'b0;
-               L<=1'b1;
-             end
-           end
-           else begin
-            E<=0;
-            G<=0;
-            L<=0;
-            ERR<=0;
-           end
-           end
-           4'b1001: begin
-            if(INP_VALID==2'b11) begin
+            4'b0110: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1000: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1001: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1010: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1011: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1100: begin
+                RES<=0;
+                ERR<=1;
+            end
+            default: begin
+                RES<=RES;
+            end
+            endcase
+         end
+         2'b10: begin //ONLY OPB IS VALID
+            case(CMD_1) 
+            4'b000: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0001: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0010: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0011:begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0100: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0101: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0110: begin
+                RES<={1'b0,OPB_1}+1;
+                COUT<=({1'b0,OPB_1}+1'b1)>>N;   
+                ERR<=0;
+            end
+            4'b0110: begin
+                RES<={1'b0,OPB_1}-1;
+                OFLOW<=(OPB_1<1'b1)? 1'b1: 1'b0; 
+                ERR<=0;
+            end
+            4'b1000: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1001: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1010: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1011: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1100: begin
+                RES<=0;
+                ERR<=1;
+            end
+            default: begin
+                RES<=RES;
+            end
+            endcase   
+         end
+         2'b11:
+         case(CMD_1) 
+            4'b000: begin//ADDITION
+                RES<=OPA_1+OPB_1;
+                ERR<=0;
+                COUT<=({1'b0,OPA_1}+{1'b0,OPB_1})>>N;
+            end
+            4'b0001: begin //SUBTRACTION
+                RES<=OPA_1-OPB_1;
+                OFLOW<=(OPA_1<OPB_1)? 1'b1: 1'b0;//if OPA_1 IS less than OPB_1 then it will overflow
+                ERR<=0;
+            end
+            4'b0010: begin //ADDITION WITH CIN
+                RES<=OPA_1+OPB_1+CIN;
+                COUT<=({1'b0,OPA_1}+{1'b0,OPB_1}+CIN)>>N;
+                ERR<=1;
+            end
+            4'b0011:begin //SUBTRACTION WITH CIN
+                RES<=OPA_1-OPB_1-CIN;
+                OFLOW<=(OPA_1<OPB_1)? 1'b1: 1'b0;
+                ERR<=1;
+            end
+            4'b0100: begin //INCREMENT A
+                RES<={1'b0,OPA_1}+1;
+                COUT<=({1'b0,OPA_1}+1'b1)>>N;   
+                ERR<=0;
+            end
+            4'b0101: begin //DECREMENT A
+                RES<={1'b0,OPA_1}-1;
+                OFLOW<=(OPB_1<1'b1)? 1'b1: 1'b0; 
+                ERR<=0;
+            end
+            4'b0110: begin//INCREMENT B
+                RES<={1'b0,OPB_1}+1;
+                COUT<=({1'b0,OPB_1}+1'b1)>>N;   
+                ERR<=0;
+            end
+            4'b0110: begin //DECREMENT B
+                RES<={1'b0,OPB_1}-1;
+                OFLOW<=(OPB_1<1'b1)? 1'b1: 1'b0; 
+                ERR<=0;
+            end
+            4'b1000: begin
+                RES<=0;
+                if(OPA_1<OPB_1) begin
+                    G<=0;
+                    E<=0;
+                    L<=1;
+                end
+                else if(OPA_1==OPB_1) begin
+                    G<=0;
+                    E<=1;
+                    L<=0;
+                end
+                else if(OPA_1>OPB_1) begin
+                    G<=1;
+                    E<=0;
+                    L<=0;
+                end
+                else begin
+                    G<=0;
+                    E<=0;
+                    L<=0;
+                end
+                ERR<=0;
+            end
+            4'b1001: begin
                 OPA_1<=OPA+1;
                 OPB_1<=OPB+1;
                 temp_mul<=(OPA+1)*(OPB+1);
                 mul_count<=0;
                 mul_active<=1;
-                mul_cmd<=CMD;
+                mul_CMD<=CMD;
+                ERR<=0;
             end
-            else begin
-                ERR<=1;
-                RES<=0;
-            end
-           end
-           4'b1010: begin
-            if(INP_VALID==2'b11) begin
+            4'b1010: begin
                 OPA_1<=OPA<<1;
                 temp_mul<=(OPA<<1)*OPB;
                 mul_count<=0;
                 mul_active<=1;
-                mul_cmd<=CMD;
+                mul_CMD<=CMD;
+                ERR<=0;
             end
-            else begin
-                RES<=0;
-                ERR<=1;
+            4'b1011: begin
+                sum=$signed(OPA)-$signed(OPB);
+                RES<=sum;
+                OFLOW<=(~OPA[N] && ~OPB[N]&& sum[N])  || (OPA[N] && OPB[N]&& ~sum[N]);
+                ERR<=0;
             end
-           end
-           4'b1011: begin
-            if(INP_VALID==2'b11) begin
-              sum=$signed(OPA)-$signed(OPB);
-              RES<=sum;
-              OFLOW<=((~OPA[N] && ~OPB[N]) && sum[N])  || ((OPA[N] && OPB[N]) && ~sum[N]);
+            4'b1100: begin
+                diff=$signed(OPA)-$signed(OPB);
+                RES<=diff;
+                OFLOW<=(OPA_1[N] && ~OPB_1[N] && ~diff[N]) || (~OPA_1[N] && OPB_1[N] && diff[N]);
+                ERR<=0;
             end
-            else begin
-                RES<=0;
-                ERR<=1;
+            default: begin
+                RES<=RES;
             end
-           end
-           4'b1100: begin
-            if(INP_VALID==2'b11) begin
-              diff=$signed(OPA)-$signed(OPB);
-              RES<=diff;
-              OFLOW<=((OPA[N] && ~OPB[N]) && ~diff[N]) || ((~OPA[N] && OPB[N] )&& diff[N]);
-            end
-            else begin
-                RES<=0;
-                ERR<=1;
-            end
-           end
-
-           default:   // For any other case send zero value
-            begin
-            RES<=0;
-            COUT<=0;
-            OFLOW<=0;
-            G<=0;
-            E<=0;
-            L<=0;
-            ERR<=0;
-           end
-          endcase
-         end
-
-        else          // MODE signal is low, then this is a Logical Operation
-        begin 
-           RES<=0;
-           COUT<=0;
-           OFLOW<=0;
-           G<=0;
-           E<=0;
-           L<=0;
-           ERR<=0;
-           case(CMD)    // CMD is the binary code value of the Logical Operation
-             4'b0000: begin  // CMD = 0000: AND
-                if(INP_VALID==2'b11) begin
-                    RES<=OPA&OPB;   
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0001: // CMD = 0001: NAND
-             begin
-                if(INP_VALID==2'b11) begin
-                    RES<=~(OPA&OPB);   
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0010:// CMD = 0010: OR
-             begin
-                if(INP_VALID==2'b11) begin
-                  RES<=OPA|OPB;   
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0011: // CMD = 0011: NOR
-            begin
-                if(INP_VALID==2'b11) begin
-                  RES<=~(OPA|OPB)  ;   
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0100:// CMD = 0100: XOR
-             begin
-                if(INP_VALID==2'b11) begin
-                    RES<=OPA^OPB ;   
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0101:  // CMD = 0101: XNOR
-            begin
-                if(INP_VALID==2'b11) begin
-                    RES<=~(OPA^OPB);   
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0110:        // CMD = 0110: NOT_A
-             begin
-                if(INP_VALID==2'b11 ||INP_VALID==2'b01) begin
-                    RES<=~OPA;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b0111:        // CMD = 0111: NOT_B
-             begin
-                if(INP_VALID==2'b11 ||INP_VALID==2'b10) begin
-                  RES<=OPB;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b1000:      // CMD = 1000: SHR1_A
-             begin
-                if(INP_VALID==2'b11 ||INP_VALID==2'b01) begin
-                  RES<=OPA>>1;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b1001:      // CMD = 1001: SHL1_A
-             begin
-                if(INP_VALID==2'b11 ||INP_VALID==2'b01) begin
-                  RES<=OPA<<1;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b1010: // CMD = 1010: SHR1_B
-             begin
-                if(INP_VALID==2'b11 ||INP_VALID==2'b10) begin
-                  RES<=OPB>>1;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b1011: // CMD = 1011: SHL1_B
-             begin
-                if(INP_VALID==2'b11 ||INP_VALID==2'b10) begin
-                  RES<=OPB<<1;
-                end
-                else begin
-                    RES<=0;
-                    ERR<=1;
-                end
-             end
-             4'b1100:                        // CMD = 1100: ROL_A_B
-                  begin
-                        if (INP_VALID == 2'b11)
-                        begin
-                            if (|OPB[(N-1):(N/2)]) begin
-                                ERR <= 1'b1;
-                            end
-                                
-                            else begin
-                                RES <= {{N{1'b0}}, (OPA << OPB[$clog2(N)-1:0]) | (OPA >> (N - OPB[$clog2(N)-1:0]))};
-                            end
-                        end
-             else begin
-                RES<=0;
-                ERR<=1;
-             end
-             end
-             4'b1101:                        // CMD = 1101: ROR_A_B 
-             begin
-                 if (INP_VALID == 2'b11)
-                        begin
-                          if (|OPB[(N-1):(N/2)]) begin
-                                ERR <= 1'b1;
-                          end
-                          else begin
-                                RES <= {{N{1'b0}}, (OPA << OPB[$clog2(N)-1:0]) | (OPA >> (N - OPB[$clog2(N)-1:0]))};
-                          end
-                        end
-
-        
-             else
-             begin
-                RES<=0;
-                ERR<=1;
-             end
-             end
-             default:    // For any other case send high impedence value
-               begin
-               RES<=RES;
-               COUT<=0;
-               OFLOW<=0;
-               G<=0;
-               E<=0;
-               L<=0;
-               ERR<=0;
-               end
-          endcase
-     end
+            endcase
+         default: RES<=RES;
+         endcase
     end
-   end
+    else begin
+         RES<=0;
+         ERR<=0;
+         G<=0;
+         E<=0;
+         L<=0;
+         COUT<=0;
+         OFLOW<=0;
+         case(INP_VALID) 
+         2'b00: begin //both OPA and OPB not valid
+            RES<=0;
+            ERR<=1;
+         end
+         2'b01: begin //Only OPA is valid
+            case(CMD_1)
+            4'b0000: begin//AND
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0001: begin//NAND
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0010: begin//OR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0011: begin//NOR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0100: begin//XOR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0101: begin//XNOR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0110: begin //NOT A
+                RES<=~OPA;
+                ERR<=0;
+            end
+            4'b0111: begin//NOT B
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1000: begin //shift RIGHT A
+                RES<=OPA>>1;
+                ERR<=0;
+            end
+            4'b1001: begin //shift LEFT A
+                RES<=OPA<<1;
+            end
+            4'b1010: begin  //shift RIGHT B
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1011: begin ///shift LEFT B
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1100: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1101: begin
+                RES<=0;
+                ERR<=1;
+            end
+            default: RES<=RES;
+            endcase
+         end
+         2'b10: begin //Only OPBB is valid
+            case(CMD_1)
+            4'b0000: begin//AND
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0001: begin//NAND
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0010: begin//OR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0011: begin//NOR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0100: begin//XOR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0101: begin//XNOR
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0110: begin //NOT A
+                RES<=0;
+                ERR<=1;
+            end
+            4'b0111: begin//NOT B
+                RES<=~OPB_1;
+                ERR<=0;
+            end
+            4'b1000: begin //shift RIGHT A
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1001: begin //shift LEFT A
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1010: begin  //shift RIGHT B
+                RES<=OPB_1>>1;
+                ERR<=0;
+            end
+            4'b1011: begin ///shift LEFT B
+                RES<=OPB_1<<1;
+                ERR<=0;
+            end
+            4'b1100: begin
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1101: begin
+                RES<=0;
+                ERR<=1;
+            end
+            default: RES<=RES;
+            endcase
+         end 
+         2'b11: begin //both are valid
+            case(CMD_1)
+            4'b0000: begin//AND
+                RES<=OPA&OPB_1;
+                ERR<=0;
+            end
+            4'b0001: begin//NAND
+                RES<=~(OPA&OPB_1);
+                ERR<=0;
+            end
+            4'b0010: begin//OR
+                RES<=OPA|OPB_1;
+                ERR<=0;
+            end
+            4'b0011: begin//NOR
+                RES<=~(OPA|OPB_1);
+                ERR<=0;
+            end
+            4'b0100: begin//XOR
+                RES<=OPA^OPB_1;
+                ERR<=0;
+            end
+            4'b0101: begin//XNOR
+                RES<=~(OPA^OPB_1);
+                ERR<=0;
+            end
+            4'b0110: begin //NOT A
+                RES<=~OPA;
+                ERR<=0;
+            end
+            4'b0111: begin//NOT B
+                RES<=~OPB_1;
+                ERR<=0;
+            end
+            4'b1000: begin //shift RIGHT A
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1001: begin //shift LEFT A
+                RES<=0;
+                ERR<=1;
+            end
+            4'b1010: begin  //shift RIGHT B
+                RES<=OPB_1>>1;
+                ERR<=1;
+            end
+            4'b1011: begin ///shift LEFT B
+                RES<=OPB_1<<1;
+                ERR<=0;
+            end
+            4'b1100: begin //ROL OPA OPB_1 times
+                if (|OPB_1[(N-1):(N/2)]) begin
+                    ERR <= 1'b1;
+                end
+                                
+                else begin
+                    RES <= {{N{1'b0}}, (OPA << OPB_1[$clog2(N)-1:0]) | (OPA >> (N - OPB_1[$clog2(N)-1:0]))};
+                end
+                ERR<=1;
+            end
+            4'b1101: begin //ROR OPA OPB_1 times
+                if (|OPB_1[(N-1):(N/2)]) begin
+                    ERR <= 1'b1;
+                end
+                else begin
+                    RES <= {{N{1'b0}}, (OPA << OPB_1[$clog2(N)-1:0]) | (OPA >> (N - OPB_1[$clog2(N)-1:0]))};
+                end
+                ERR<=0;
+            end
+            default: RES<=RES;
+            endcase
+            
+         end
+         default:RES<=RES;
+         endcase        
+    end
+    end
+end
 endmodule
