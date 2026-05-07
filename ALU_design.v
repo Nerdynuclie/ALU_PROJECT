@@ -67,18 +67,19 @@ always@(posedge CLK)
          end
          else if(MODE)
          begin
-           //RES=0;
-           COUT=1'b0;
-           OFLOW=1'b0;
-           G=1'b0;
-           E=1'b0;
-           L=1'b0;
-           ERR=1'b0;
+           RES<=0;
+           COUT<=1'b0;
+           OFLOW<=1'b0;
+           G<=1'b0;
+           E<=1'b0;
+           L<=1'b0;
+           ERR<=1'b0;
           case(CMD)             // CMD is the binary code value of the Arithmetic Operation
            4'b0000:             // CMD = 0000: ADD 
             begin  
                 if(INP_VALID==2'b11) begin      
                     RES<=OPA+OPB;
+                    
                     COUT<=({1'b0,OPA}+{1'b0,OPB})>>N;
             end
             else begin
@@ -189,7 +190,7 @@ always@(posedge CLK)
             E<=0;
             G<=0;
             L<=0;
-            ERR<=1;
+            ERR<=0;
            end
            end
            4'b1001: begin
