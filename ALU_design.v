@@ -289,13 +289,13 @@ always @(posedge CLK or posedge RST ) begin
             4'b1011: begin
                 sum=$signed(OPA)-$signed(OPB);
                 RES<=sum;
-                OFLOW<=(~OPA[N] && ~OPB[N]&& sum[N])  || (OPA[N] && OPB[N]&& ~sum[N]);
+                OFLOW<=(~OPA[N-1] && ~OPB[N-1]&& sum[N])  || (OPA[N-1] && OPB[N-1]&& ~sum[N]);
                 ERR<=0;
             end
             4'b1100: begin
                 diff=$signed(OPA)-$signed(OPB);
                 RES<=diff;
-                OFLOW<=(OPA_1[N] && ~OPB_1[N] && ~diff[N]) || (~OPA_1[N] && OPB_1[N] && diff[N]);
+                OFLOW<=(OPA_1[N-1] && ~OPB_1[N-1] && ~diff[N]) || (~OPA_1[N-1] && OPB_1[N-1] && diff[N]);
                 ERR<=0;
             end
             default: begin
