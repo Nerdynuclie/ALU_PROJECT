@@ -1,4 +1,3 @@
-// Code your design here
 module ALU_design#(parameter N=4)(OPA,OPB,CIN,CLK,RST,INP_VALID,CMD,CE,MODE,COUT,OFLOW,RES,G,E,L,ERR);
 
 
