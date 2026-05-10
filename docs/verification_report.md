@@ -11,9 +11,6 @@ Parameterized ALU Design and Verification
 ## Author Name
 Nerdy_nuclie
 
-## Roll Number / Employee ID
-XXXXXXXX
-
 ---
 
 # PROJECT INTRODUCTION
